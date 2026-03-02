@@ -9,12 +9,14 @@ Features:
 - HaveIBeenPwned breach lookup
 - WHOIS domain lookup
 
-Run `install.bat` (Windows) or `install.sh` (Unix) to install required packages (holehe, requests, python-whois, etc.)
+Run `install.bat` (Windows) or `install.sh` (Unix) to install or update required packages. The installer scripts now upgrade any existing dependencies and automatically launch the program when they finish.
 """
 
 import os
 import sys
 import json
+
+import webbrowser
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict
@@ -655,6 +657,17 @@ class OSINTManager:
             self.print_error(f"Additional DNS query failed: {e}")
         input("Press Enter to continue...")
 
+    def social_media_lookback(self):
+        """Open whopostedwhat.com for social media lookback."""
+        self.print_header("SOCIAL MEDIA LOOKBACK")
+        self.print_info("Opening https://whopostedwhat.com/ in your default browser...")
+        try:
+            webbrowser.open("https://whopostedwhat.com/")
+            self.print_success("Browser opened successfully")
+        except Exception as e:
+            self.print_error(f"Failed to open browser: {e}")
+        input("Press Enter to continue...")
+
     def ip_geolocation(self):
         """Look up geolocation for an IP address using free ip-api.com service."""
         self.print_header("IP GEOLOCATION")
@@ -672,6 +685,360 @@ class OSINTManager:
             self.print_error(f"Error performing geolocation: {e}")
         input("Press Enter to continue...")
 
+    def find_subdomains(self):
+        """Find subdomains using Certificate Transparency logs and DNS brute force."""
+        self.print_header("SUBDOMAIN ENUMERATION")
+        domain = self.input_prompt("Enter domain (e.g., example.com)")
+        
+        if not domain:
+            self.print_error("Domain cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        subdomains = set()
+        
+        # Method 1: Query crt.sh (Certificate Transparency logs)
+        self.print_info("Searching Certificate Transparency logs via crt.sh...")
+        try:
+            import requests
+            url = f"https://crt.sh/?q=%.{domain}&output=json"
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 200:
+                certs = resp.json()
+                for cert in certs:
+                    name = cert.get('name_value', '')
+                    # Extract subdomains from name_value (can contain multiple domains)
+                    names = name.split('\n')
+                    for n in names:
+                        n = n.strip()
+                        if n and n.endswith(domain):
+                            # Remove wildcard if present
+                            n = n.replace('*.', '')
+                            subdomains.add(n)
+            self.print_success(f"Found {len(subdomains)} subdomains from crt.sh")
+        except Exception as e:
+            self.print_error(f"crt.sh search failed: {e}")
+        
+        # Method 2: Attempt common subdomain prefixes
+        self.print_info("Attempting DNS resolution of common subdomains...")
+        common_prefixes = [
+            'www', 'mail', 'ftp', 'localhost', 'webmail', 'smtp', 'pop', 'ns1', 'ns2',
+            'cpanel', 'whm', 'autodiscover', 'autoconfig', 'admin', 'test', 'dev', 'staging',
+            'api', 'cdn', 'img', 'images', 'static', 'assets', 'files', 'downloads',
+            'blog', 'shop', 'store', 'support', 'help', 'contact', 'mail1', 'server',
+            'database', 'db', 'backup', 'old', 'temp', 'vpn', 'internal', 'secure'
+        ]
+        
+        found_count = 0
+        try:
+            import socket
+            for prefix in common_prefixes:
+                subdomain = f"{prefix}.{domain}"
+                try:
+                    socket.gethostbyname(subdomain)
+                    subdomains.add(subdomain)
+                    found_count += 1
+                except socket.gaierror:
+                    pass
+                except Exception:
+                    pass
+            self.print_success(f"Successfully resolved {found_count} common subdomains")
+        except Exception as e:
+            self.print_error(f"DNS brute force failed: {e}")
+        
+        # Display results
+        if subdomains:
+            self.print_success(f"Found {len(subdomains)} unique subdomains:")
+            for subdomain in sorted(subdomains):
+                print(f"  - {subdomain}")
+            print()
+            
+            # Option to save to database
+            save = self.input_prompt("Save results to database? (yes/no)").lower()
+            if save == 'yes' and self.ensure_database_selected():
+                try:
+                    db_path = self.db_dir / f"{self.current_db}.txt"
+                    data = json.loads(db_path.read_text())
+                    for subdomain in subdomains:
+                        record = {
+                            "domain": domain,
+                            "subdomain": subdomain,
+                            "notes": "enumeration",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        data["records"].append(record)
+                    db_path.write_text(json.dumps(data, indent=2))
+                    self.print_success(f"Saved {len(subdomains)} subdomains to database")
+                except Exception as e:
+                    self.print_error(f"Failed to save to database: {e}")
+        else:
+            self.print_info("No subdomains found")
+        
+        input("Press Enter to continue...")
+
+    def person_search(self):
+        """Search for information about a person using multiple methods."""
+        self.print_header("PERSON SEARCH & OSINT")
+        self.print_menu([
+            "Search by Name",
+            "Search by Username",
+            "Search by Phone Number",
+            "Search by Email (Social profiles)",
+            "Reverse Phone Lookup",
+            "Back to Main Menu"
+        ])
+        
+        choice = self.input_prompt("Select search method")
+        
+        if choice == "1":
+            self.search_person_by_name()
+        elif choice == "2":
+            self.search_person_by_username()
+        elif choice == "3":
+            self.search_person_by_phone()
+        elif choice == "4":
+            self.search_person_by_email()
+        elif choice == "5":
+            self.reverse_phone_lookup()
+        elif choice != "6":
+            self.print_error("Invalid option")
+            input("Press Enter to continue...")
+
+    def search_person_by_name(self):
+        """Search for a person by name across public sources."""
+        self.print_header("SEARCH BY NAME")
+        first_name = self.input_prompt("Enter first name")
+        last_name = self.input_prompt("Enter last name")
+        
+        if not first_name or not last_name:
+            self.print_error("Name cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        results = []
+        full_name = f"{first_name} {last_name}"
+        
+        # Search across major social platforms and people search engines
+        self.print_info("Searching across multiple sources...")
+        
+        social_platforms = [
+            ("Facebook", f"https://facebook.com/search/people/?q={first_name}+{last_name}"),
+            ("Twitter", f"https://twitter.com/search?q={first_name}%20{last_name}&type=users"),
+            ("LinkedIn", f"https://www.linkedin.com/search/results/people/?keywords={first_name}%20{last_name}"),
+            ("Instagram", f"https://www.instagram.com/explore/tags/{first_name}{last_name}/"),
+            ("YouTube", f"https://www.youtube.com/results?search_query={first_name}+{last_name}"),
+            ("GitHub", f"https://github.com/search?q={first_name}+{last_name}&type=users"),
+            ("Reddit", f"https://www.reddit.com/search/?q={first_name}%20{last_name}"),
+        ]
+        
+        self.print_success(f"Search URLs for '{full_name}':")
+        for platform, url in social_platforms:
+            print(f"  {Colors.CYAN}{platform}{Colors.ENDC}: {url}")
+            results.append({"platform": platform, "url": url})
+        
+        print()
+        
+        # Try to fetch from Google Custom Search or similar
+        try:
+            import requests
+            # Using DuckDuckGo which doesn't require API key (basic search)
+            search_query = f"{first_name}+{last_name}"
+            url = f"https://duckduckgo.com/search?q={search_query}&format=json"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+            if resp.status_code == 200:
+                self.print_info("DuckDuckGo search query:")
+                print(f"  https://duckduckgo.com/?q={search_query.replace('+', '%20')}")
+        except Exception as e:
+            pass
+        
+        # Option to save results
+        save = self.input_prompt("Save search results to database? (yes/no)").lower()
+        if save == 'yes' and self.ensure_database_selected():
+            try:
+                db_path = self.db_dir / f"{self.current_db}.txt"
+                data = json.loads(db_path.read_text())
+                record = {
+                    "name": full_name,
+                    "search_type": "person_by_name",
+                    "platforms": [r["platform"] for r in results],
+                    "timestamp": datetime.now().isoformat()
+                }
+                data["records"].append(record)
+                db_path.write_text(json.dumps(data, indent=2))
+                self.print_success("Search results saved to database")
+            except Exception as e:
+                self.print_error(f"Failed to save: {e}")
+        
+        input("Press Enter to continue...")
+
+    def search_person_by_username(self):
+        """Search for a person by username across platforms."""
+        self.print_header("SEARCH BY USERNAME")
+        username = self.input_prompt("Enter username")
+        
+        if not username:
+            self.print_error("Username cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        results = []
+        
+        # List of major platforms to search
+        platforms = [
+            ("Twitter", f"https://twitter.com/{username}"),
+            ("Instagram", f"https://instagram.com/{username}"),
+            ("GitHub", f"https://github.com/{username}"),
+            ("Reddit", f"https://reddit.com/user/{username}"),
+            ("YouTube", f"https://youtube.com/@{username}"),
+            ("TikTok", f"https://tiktok.com/@{username}"),
+            ("Twitch", f"https://twitch.tv/{username}"),
+            ("Discord", f"https://discordapp.com/users/@/{username}"),
+            ("Pinterest", f"https://pinterest.com/{username}"),
+            ("Snapchat", f"https://snapchat.com/add/{username}"),
+            ("Steam", f"https://steamcommunity.com/search/?q={username}"),
+            ("Telegram", f"https://t.me/{username}"),
+        ]
+        
+        self.print_success(f"Profile search URLs for '@{username}':")
+        for platform, url in platforms:
+            print(f"  {Colors.CYAN}{platform}{Colors.ENDC}: {url}")
+            results.append({"platform": platform, "url": url})
+        
+        print()
+        
+        # Manual username search with DNS/HTTP checks
+        self.print_info("Attempting to verify profile existence...")
+        found_count = 0
+        try:
+            import requests
+            for platform, url in platforms:
+                try:
+                    resp = requests.head(url, timeout=3, allow_redirects=True)
+                    if resp.status_code < 400:
+                        found_count += 1
+                        print(f"  {Colors.GREEN}[FOUND]{Colors.ENDC} {platform}")
+                except:
+                    pass
+        except Exception:
+            pass
+        
+        if found_count > 0:
+            self.print_success(f"Verified {found_count} active profile(s)")
+        
+        print()
+        
+        # Option to save
+        save = self.input_prompt("Save search results to database? (yes/no)").lower()
+        if save == 'yes' and self.ensure_database_selected():
+            try:
+                db_path = self.db_dir / f"{self.current_db}.txt"
+                data = json.loads(db_path.read_text())
+                record = {
+                    "username": username,
+                    "search_type": "person_by_username",
+                    "platforms": [r["platform"] for r in results],
+                    "verified_count": found_count,
+                    "timestamp": datetime.now().isoformat()
+                }
+                data["records"].append(record)
+                db_path.write_text(json.dumps(data, indent=2))
+                self.print_success("Search results saved to database")
+            except Exception as e:
+                self.print_error(f"Failed to save: {e}")
+        
+        input("Press Enter to continue...")
+
+    def search_person_by_phone(self):
+        """Search for phone number information."""
+        self.print_header("SEARCH BY PHONE NUMBER")
+        phone = self.input_prompt("Enter phone number (format: +1-555-0123 or 5550123)")
+        
+        if not phone:
+            self.print_error("Phone number cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        # Try TrueCaller API (requires key) or other services
+        self.print_info("Phone lookup services:")
+        print(f"  TrueCaller: https://truecaller.com/search/{phone.replace('-', '').replace(' ', '')}")
+        print(f"  ZoomInfo: https://www.zoominfo.com/search")  
+        print(f"  WhitePages: https://whitepages.com/search/Phone")
+        print()
+        
+        self.print_info("Note: Most phone lookups require paid subscriptions or API keys")
+        self.print_info("Free alternatives: Google search, social media search with phone")
+        
+        try:
+            import requests
+            # Try to get country code info
+            clean_phone = ''.join(c for c in phone if c.isdigit())
+            if clean_phone.startswith('1'):
+                print(f"  Country: United States")
+            elif clean_phone.startswith('44'):
+                print(f"  Country: United Kingdom")
+            print()
+        except:
+            pass
+        
+        input("Press Enter to continue...")
+
+    def search_person_by_email(self):
+        """Search for a person's social profiles using email."""
+        self.print_header("SEARCH BY EMAIL (SOCIAL PROFILES)")
+        email = self.input_prompt("Enter email address")
+        
+        if not email:
+            self.print_error("Email cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        username = email.split('@')[0]
+        
+        self.print_info("Searching for social profiles with this email/username...")
+        print()
+        
+        # Common platforms
+        search_urls = [
+            ("Google Images", f"https://www.google.com/search?q={email}&tbm=isch"),
+            ("Google People", f"https://www.google.com/search?q={email}"),
+            ("Bing Search", f"https://www.bing.com/search?q={email}"),
+            ("LinkedIn", f"https://www.linkedin.com/search/results/people/?keywords={email}"),
+            ("GitHub", f"https://github.com/search?q={username}&type=users"),
+            ("Twitter", f"https://twitter.com/search?q={email}"),
+            ("Facebook", f"https://facebook.com/search/people/?q={email}"),
+        ]
+        
+        for service, url in search_urls:
+            print(f"  {Colors.CYAN}{service}{Colors.ENDC}")
+            print(f"    {url}\n")
+        
+        input("Press Enter to continue...")
+
+    def reverse_phone_lookup(self):
+        """Perform reverse phone number lookup."""
+        self.print_header("REVERSE PHONE LOOKUP")
+        phone = self.input_prompt("Enter phone number")
+        
+        if not phone:
+            self.print_error("Phone number cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        clean_phone = ''.join(c for c in phone if c.isdigit())
+        
+        self.print_info("Reverse phone lookup services:")
+        print(f"  TrueCaller: https://truecaller.com/search/{clean_phone}")
+        print(f"  WhitePages: https://whitepages.com/phone/{clean_phone}")
+        print(f"  ReversePhoneLookup: https://www.reversephonelookup.com/search?number={clean_phone}")
+        print(f"  ZoomInfo: https://www.zoominfo.com/")
+        print(f"  Google: https://www.google.com/search?q={clean_phone}")
+        print()
+        
+        self.print_info("Most services require paid subscriptions")
+        self.print_info("Free alternative: Try Google search or social media search")
+        
+        input("Press Enter to continue...")
+
     def main_menu(self):
         """Main application menu"""
         while True:
@@ -683,6 +1050,9 @@ class OSINTManager:
                 "Domain Lookup (WHOIS)",
                 "DNS Lookup",
                 "IP Geolocation",
+                "Social media Lookback",
+                "Subdomain Enumeration",
+                "Person Search & OSINT",
                 "Configuration",
                 "Exit"
             ])
@@ -697,13 +1067,19 @@ class OSINTManager:
                 self.search_email_hibp()
             elif choice == "4":
                 self.search_domain_whois()
-            elif choice == "5":
+            elif choice == "5":                
                 self.lookup_dns_records()
             elif choice == "6":
                 self.ip_geolocation()
             elif choice == "7":
-                self.configure_api_keys()
+                self.social_media_lookback()
             elif choice == "8":
+                self.find_subdomains()
+            elif choice == "9":
+                self.person_search()
+            elif choice == "10":
+                self.configure_api_keys()
+            elif choice == "11":
                 self.print_header("GOODBYE")
                 print(f"{Colors.CYAN}Thank you for using OSINT Manager{Colors.ENDC}\n")
                 sys.exit(0)
