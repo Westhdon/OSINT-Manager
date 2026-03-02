@@ -98,5 +98,5 @@ Additional OSINT integrations can be added by implementing new methods in `OSINT
 This project is a starting point for a more comprehensive OSINT CLI toolkit. Contributions and improvements are welcome!
 **
 
-# Updates latest update:
+# Latest update:
 02-03-2026 14:45
