@@ -1,4 +1,4 @@
-**<div align="center">
+<div align="center">
 
 ![Stars](https://img.shields.io/github/stars/Westhdon/OSINT-Manager?style=flat-square)
 ![Forks](https://img.shields.io/github/forks/Westhdon/OSINT-Manager?style=flat-square)
@@ -97,3 +97,6 @@ Additional OSINT integrations can be added by implementing new methods in `OSINT
 
 This project is a starting point for a more comprehensive OSINT CLI toolkit. Contributions and improvements are welcome!
 **
+
+# Updates latest update:
+02-03-2026 14:45
