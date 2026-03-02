@@ -10,7 +10,7 @@
 </div>
 
 <div align="center">
-# 🔍 OSINT-Manager
+## 🔍 OSINT-Manager
 </div>
 
 # About
