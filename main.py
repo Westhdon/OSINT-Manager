@@ -1039,6 +1039,455 @@ class OSINTManager:
         
         input("Press Enter to continue...")
 
+    def reverse_ip_lookup(self):
+        """Perform reverse IP lookup to find domains hosted on an IP."""
+        self.print_header("REVERSE IP LOOKUP")
+        ip = self.input_prompt("Enter IP address")
+        if not ip:
+            self.print_error("IP address cannot be empty")
+            input("Press Enter to continue...")
+            return
+        try:
+            import requests
+            self.print_info(f"Looking up domains/websites hosted on {ip}...")
+            # Using a free reverse IP lookup service
+            url = f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90&verbose"
+            headers = {"Key": "placeholder", "Accept": "application/json"}
+            resp = requests.get(f"https://ipqualityscore.com/api/json/ip/reverse-dns?ip={ip}", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                self.print_success("Reverse DNS Information:")
+                for k, v in data.items():
+                    if v:
+                        print(f"  {k}: {v}")
+            # Try alternate service
+            resp2 = requests.get(f"https://api.ipaddress.com/{ip}", timeout=5)
+            if resp2.status_code == 200:
+                self.print_info("Additional IP Intelligence:")
+                print(f"  Check: https://www.abuseipdb.com/check/{ip}")
+                print(f"  Check: https://www.shodan.io/search?query={ip}")
+        except Exception as e:
+            self.print_info(f"Try these services manually:")
+            print(f"  Shodan: https://www.shodan.io/search?query={ip}")
+            print(f"  AbuseIPDB: https://www.abuseipdb.com/check/{ip}")
+            print(f"  Reverse IP: https://reverseip.domaintools.com/?ip={ip}")
+        input("Press Enter to continue...")
+
+    def ssl_certificate_lookup(self):
+        """Look up SSL certificate information for a domain."""
+        self.print_header("SSL CERTIFICATE LOOKUP")
+        domain = self.input_prompt("Enter domain (e.g., example.com)")
+        if not domain:
+            self.print_error("Domain cannot be empty")
+            input("Press Enter to continue...")
+            return
+        try:
+            import socket
+            import ssl
+            from datetime import datetime
+            self.print_info(f"Retrieving SSL certificate for {domain}...")
+            try:
+                context = ssl.create_default_context()
+                with socket.create_connection((domain, 443), timeout=5) as sock:
+                    with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                        cert = ssock.getpeercert()
+                        self.print_success("SSL Certificate Information:")
+                        print(f"  Subject: {cert.get('subject')}")
+                        print(f"  Issuer: {cert.get('issuer')}")
+                        if cert.get('notAfter'):
+                            print(f"  Expires: {cert.get('notAfter')}")
+                        if cert.get('subjectAltName'):
+                            print(f"  Alternative Names: {cert.get('subjectAltName')}")
+            except Exception as e:
+                self.print_error(f"SSL lookup failed: {e}")
+                self.print_info("Try these services:")
+                print(f"  SSL Labs: https://www.ssllabs.com/ssltest/analyze.html?d={domain}")
+                print(f"  Censys: https://censys.io/search?q={domain}")
+                print(f"  crt.sh: https://crt.sh/?q={domain}")
+        except Exception as e:
+            self.print_error(f"Error: {e}")
+        input("Press Enter to continue...")
+
+    def email_verification(self):
+        """Verify if an email address is valid/deliverable."""
+        self.print_header("EMAIL VERIFICATION")
+        email = self.input_prompt("Enter email address to verify")
+        if not email:
+            self.print_error("Email cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        self.print_info(f"Verifying email format and deliverability for {email}...")
+        
+        # Basic format check
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            self.print_error("Invalid email format")
+            input("Press Enter to continue...")
+            return
+        
+        self.print_success("Email format is valid")
+        
+        try:
+            # Check MX records
+            import dns.resolver
+            domain = email.split('@')[1]
+            self.print_info(f"Checking MX records for {domain}...")
+            mx_records = dns.resolver.resolve(domain, 'MX')
+            self.print_success(f"Found {len(mx_records)} MX record(s):")
+            for mx in mx_records:
+                print(f"  - {mx.exchange} (Priority: {mx.preference})")
+        except ImportError:
+            self.print_info("Install 'dnspython' for MX record verification")
+        except Exception as e:
+            self.print_error(f"MX check failed: {e}")
+        
+        # Try online verification service
+        try:
+            import requests
+            resp = requests.get(f"https://api.hunter.io/v2/email-verifier?email={email}&domain={domain}", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                self.print_success("Email verification result:")
+                print(f"  Status: {data.get('data', {}).get('status', 'unknown')}")
+        except:
+            pass
+        
+        input("Press Enter to continue...")
+
+    def check_username_availability(self):
+        """Check if a username is available across multiple platforms."""
+        self.print_header("USERNAME AVAILABILITY CHECKER")
+        username = self.input_prompt("Enter username to check")
+        if not username:
+            self.print_error("Username cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        self.print_info(f"Checking availability for '@{username}'...")
+        
+        platforms = {
+            "Twitter": f"https://twitter.com/{username}",
+            "Instagram": f"https://instagram.com/{username}",
+            "GitHub": f"https://github.com/{username}",
+            "Reddit": f"https://reddit.com/user/{username}",
+            "YouTube": f"https://youtube.com/@{username}",
+            "Twitch": f"https://twitch.tv/{username}",
+            "TikTok": f"https://tiktok.com/@{username}",
+            "Discord": f"https://discordapp.com/users/@/{username}",
+            "Pinterest": f"https://pinterest.com/{username}",
+            "Snapchat": f"https://snapchat.com/add/{username}",
+            "Steam": f"https://steamcommunity.com/search/?q={username}",
+            "Telegram": f"https://t.me/{username}",
+            "Medium": f"https://medium.com/@{username}",
+            "Dev.to": f"https://dev.to/{username}",
+            "GitLab": f"https://gitlab.com/{username}",
+            "Mastodon": f"https://mastodon.social/@{username}",
+        }
+        
+        available = []
+        taken = []
+        
+        try:
+            import requests
+            for platform, url in platforms.items():
+                try:
+                    resp = requests.head(url, timeout=3, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+                    if resp.status_code < 400:
+                        taken.append(platform)
+                        print(f"  {Colors.RED}[TAKEN]{Colors.ENDC} {platform}")
+                    else:
+                        available.append(platform)
+                        print(f"  {Colors.GREEN}[FREE]{Colors.ENDC} {platform}")
+                except:
+                    pass
+        except Exception as e:
+            self.print_error(f"Checker error: {e}")
+        
+        print()
+        self.print_success(f"Available on {len(available)} platform(s), Taken on {len(taken)} platform(s)")
+        input("Press Enter to continue...")
+
+    def batch_email_lookup(self):
+        """Perform batch HIBP lookup on multiple emails."""
+        self.print_header("BATCH EMAIL BREACH LOOKUP")
+        self.print_info("Enter emails (one per line, empty line to finish):")
+        emails = []
+        while True:
+            email = input(f"{Colors.BLUE}->{Colors.ENDC} ").strip()
+            if not email:
+                break
+            emails.append(email)
+        
+        if not emails:
+            self.print_error("No emails provided")
+            input("Press Enter to continue...")
+            return
+        
+        self.print_info(f"Checking {len(emails)} email(s) for breaches...")
+        try:
+            import requests
+            import time
+            headers = {"User-Agent": "osint-manager"}
+            api_key = os.environ.get("HIBP_API_KEY") or self.config.get("hibp_api_key")
+            if api_key:
+                headers["hibp-api-key"] = api_key
+            
+            results = {}
+            for email in emails:
+                try:
+                    url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}"
+                    resp = requests.get(url, headers=headers, params={"truncateResponse": "false"}, timeout=5)
+                    if resp.status_code == 200:
+                        results[email] = {"status": "BREACHED", "count": len(resp.json())}
+                    elif resp.status_code == 404:
+                        results[email] = {"status": "SAFE", "count": 0}
+                    time.sleep(1.5)  # Rate limiting
+                except Exception as e:
+                    results[email] = {"status": "ERROR", "error": str(e)}
+            
+            self.print_success("Batch Lookup Results:")
+            breached = sum(1 for r in results.values() if r["status"] == "BREACHED")
+            for email, result in results.items():
+                if result["status"] == "BREACHED":
+                    print(f"  {Colors.RED}[BREACHED]{Colors.ENDC} {email} - {result['count']} breach(es)")
+                elif result["status"] == "SAFE":
+                    print(f"  {Colors.GREEN}[SAFE]{Colors.ENDC} {email}")
+            
+            self.print_success(f"Summary: {breached} breached, {len(results)-breached} safe")
+        except Exception as e:
+            self.print_error(f"Batch lookup error: {e}")
+        
+        input("Press Enter to continue...")
+
+    def generate_osint_report(self):
+        """Generate a comprehensive OSINT report from database."""
+        self.print_header("GENERATE OSINT REPORT")
+        databases = self.list_databases()
+        
+        if not databases:
+            self.print_error("No databases available")
+            input("Press Enter to continue...")
+            return
+        
+        self.print_menu(databases + ["Cancel"])
+        choice = self.input_prompt("Select database for report")
+        
+        try:
+            idx = int(choice) - 1
+            if idx == len(databases):
+                return
+            if 0 <= idx < len(databases):
+                db_name = databases[idx]
+                self.print_info(f"Generating report for '{db_name}'...")
+                
+                db_path = self.db_dir / f"{db_name}.txt"
+                data = json.loads(db_path.read_text())
+                records = data.get("records", [])
+                
+                report_name = f"{db_name}_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+                report_path = self.db_dir / report_name
+                
+                with open(report_path, 'w') as f:
+                    f.write(f"{'='*60}\n")
+                    f.write(f"OSINT REPORT - {db_name}\n")
+                    f.write(f"Generated: {datetime.now().isoformat()}\n")
+                    f.write(f"{'='*60}\n\n")
+                    
+                    f.write(f"SUMMARY\n")
+                    f.write(f"Total Records: {len(records)}\n\n")
+                    
+                    # Group by type
+                    if records and 'email' in records[0]:
+                        emails = set(r.get('email') for r in records)
+                        platforms = set(r.get('platform') for r in records if r.get('platform'))
+                        found = sum(1 for r in records if r.get('data_found') == 'yes')
+                        f.write(f"Unique Emails: {len(emails)}\n")
+                        f.write(f"Platforms Found: {len(platforms)}\n")
+                        f.write(f"Data Found Matches: {found}\n\n")
+                    
+                    f.write(f"{'='*60}\n")
+                    f.write(f"DETAILED RECORDS\n")
+                    f.write(f"{'='*60}\n\n")
+                    
+                    for i, record in enumerate(records, 1):
+                        f.write(f"Record #{i}\n")
+                        for key, value in record.items():
+                            f.write(f"  {key}: {value}\n")
+                        f.write("\n")
+                
+                self.print_success(f"Report generated: {report_name}")
+                print(f"  Location: {report_path}")
+                
+                # Option to export as CSV
+                export_csv = self.input_prompt("Export as CSV as well? (yes/no)").lower()
+                if export_csv == 'yes':
+                    self.export_database_csv(db_name, records)
+        except (ValueError, IndexError):
+            self.print_error("Invalid selection")
+        
+        input("Press Enter to continue...")
+
+    def export_database_csv(self, db_name: str, records: List[Dict]):
+        """Export database records to CSV format."""
+        try:
+            import csv
+            csv_name = f"{db_name}_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            csv_path = self.db_dir / csv_name
+            
+            if not records:
+                self.print_error("No records to export")
+                return
+            
+            fieldnames = set()
+            for record in records:
+                fieldnames.update(record.keys())
+            fieldnames = sorted(list(fieldnames))
+            
+            with open(csv_path, 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(records)
+            
+            self.print_success(f"CSV exported: {csv_name}")
+        except Exception as e:
+            self.print_error(f"CSV export failed: {e}")
+
+    def find_emails_by_domain(self):
+        """Find email addresses associated with a domain."""
+        self.print_header("EMAIL FINDER - BY DOMAIN")
+        domain = self.input_prompt("Enter company domain (e.g., example.com)")
+        if not domain:
+            self.print_error("Domain cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        self.print_info(f"Searching for emails associated with {domain}...")
+        
+        # Hunter.io alternative sources (free services)
+        services = [
+            ("Hunter.io", f"https://hunter.io/try?domain={domain}"),
+            ("Email Finder (RocketReach)", f"https://rocketreach.com/company/{domain}"),
+            ("Clearbit", f"https://clearbit.com/"),
+            ("Voila Norbert", f"https://www.violanorbert.com/"),
+            ("Find That Email", f"https://findthat.email/"),
+        ]
+        
+        self.print_success("Email finder services:")
+        for service, url in services:
+            print(f"  {Colors.CYAN}{service}{Colors.ENDC}")
+            print(f"    {url}\n")
+        
+        # Try to get basic DNS info
+        try:
+            import socket
+            self.print_info(f"DNS Information for {domain}:")
+            ip = socket.gethostbyname(domain)
+            print(f"  IP Address: {ip}")
+        except:
+            pass
+        
+        input("Press Enter to continue...")
+
+    def reverse_dns_lookup(self):
+        """Perform reverse DNS lookup."""
+        self.print_header("REVERSE DNS LOOKUP")
+        ip = self.input_prompt("Enter IP address")
+        if not ip:
+            self.print_error("IP cannot be empty")
+            input("Press Enter to continue...")
+            return
+        
+        try:
+            import socket
+            self.print_info(f"Performing reverse DNS lookup for {ip}...")
+            hostname = socket.gethostbyaddr(ip)
+            self.print_success("Reverse DNS Result:")
+            print(f"  Hostname: {hostname[0]}")
+            print(f"  Aliases: {hostname[1]}")
+            print(f"  IP Addresses: {hostname[2]}")
+        except socket.herror:
+            self.print_error("Reverse DNS lookup failed - no PTR record found")
+        except Exception as e:
+            self.print_error(f"Error: {e}")
+        
+        input("Press Enter to continue...")
+
+    def advanced_search_tools(self):
+        """Advanced OSINT search tools menu."""
+        while True:
+            self.print_header("ADVANCED SEARCH TOOLS")
+            self.print_menu([
+                "Reverse IP Lookup",
+                "SSL Certificate Lookup",
+                "Email Verification",
+                "Username Availability Checker",
+                "Email Finder by Domain",
+                "Reverse DNS Lookup",
+                "Back to Main Menu"
+            ])
+            
+            choice = self.input_prompt("Select tool")
+            
+            if choice == "1":
+                self.reverse_ip_lookup()
+            elif choice == "2":
+                self.ssl_certificate_lookup()
+            elif choice == "3":
+                self.email_verification()
+            elif choice == "4":
+                self.check_username_availability()
+            elif choice == "5":
+                self.find_emails_by_domain()
+            elif choice == "6":
+                self.reverse_dns_lookup()
+            elif choice == "7":
+                break
+            else:
+                self.print_error("Invalid option")
+                input("Press Enter to continue...")
+
+    def batch_operations(self):
+        """Batch operations menu for bulk searches."""
+        while True:
+            self.print_header("BATCH OPERATIONS")
+            self.print_menu([
+                "Batch Email Breach Lookup",
+                "Generate OSINT Report",
+                "Export Database to CSV",
+                "Back to Main Menu"
+            ])
+            
+            choice = self.input_prompt("Select operation")
+            
+            if choice == "1":
+                self.batch_email_lookup()
+            elif choice == "2":
+                self.generate_osint_report()
+            elif choice == "3":
+                databases = self.list_databases()
+                if databases:
+                    self.print_menu(databases + ["Cancel"])
+                    db_choice = self.input_prompt("Select database")
+                    try:
+                        idx = int(db_choice) - 1
+                        if 0 <= idx < len(databases):
+                            db_path = self.db_dir / f"{databases[idx]}.txt"
+                            data = json.loads(db_path.read_text())
+                            self.export_database_csv(databases[idx], data.get("records", []))
+                    except (ValueError, IndexError):
+                        self.print_error("Invalid selection")
+                    input("Press Enter to continue...")
+                else:
+                    self.print_error("No databases available")
+                    input("Press Enter to continue...")
+            elif choice == "4":
+                break
+            else:
+                self.print_error("Invalid option")
+                input("Press Enter to continue...")
+
     def main_menu(self):
         """Main application menu"""
         while True:
@@ -1053,6 +1502,8 @@ class OSINTManager:
                 "Social media Lookback",
                 "Subdomain Enumeration",
                 "Person Search & OSINT",
+                "Advanced Search Tools",
+                "Batch Operations",
                 "Configuration",
                 "Exit"
             ])
@@ -1078,8 +1529,12 @@ class OSINTManager:
             elif choice == "9":
                 self.person_search()
             elif choice == "10":
-                self.configure_api_keys()
+                self.advanced_search_tools()
             elif choice == "11":
+                self.batch_operations()
+            elif choice == "12":
+                self.configure_api_keys()
+            elif choice == "13":
                 self.print_header("GOODBYE")
                 print(f"{Colors.CYAN}Thank you for using OSINT Manager{Colors.ENDC}\n")
                 sys.exit(0)
